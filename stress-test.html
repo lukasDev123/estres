@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Profesional de Estrés · PSS</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #0B0B0B;
+    --surface: #141414;
+    --surface2: #1F1F1F;
+    --border: rgba(255,255,255,0.07);
+    --red: #FB0300;
+    --red-glow: rgba(251,3,0,0.25);
+    --text: #F5F5F5;
+    --text-muted: #888;
+    --green: #22C55E;
+    --yellow: #EAB308;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: .4;
+  }
+
+  /* Radial glow behind content */
+  .bg-glow {
+    position: fixed;
+    width: 700px; height: 700px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(251,3,0,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    top: -200px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 0;
+  }
+
+  /* Screen management */
+  .screen { display: none; opacity: 0; transition: opacity 0.5s ease; }
+  .screen.active { display: flex; opacity: 1; }
+
+  /* Glass card */
+  .glass {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Red glow button */
+  .btn-primary {
+    background: var(--red);
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0);
+    transition: background 0.3s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 32px var(--red-glow); }
+  .btn-primary:hover::before { background: rgba(255,255,255,0.08); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 400;
+    font-size: 0.9rem;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-ghost:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+  /* Likert options */
+  .likert-option {
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+  .likert-option::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--red);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .likert-option:hover { border-color: rgba(251,3,0,0.4); transform: translateY(-1px); }
+  .likert-option.selected {
+    border-color: var(--red);
+    background: rgba(251,3,0,0.12);
+    box-shadow: 0 0 20px rgba(251,3,0,0.15);
+  }
+  .likert-option.selected .option-dot { background: var(--red); box-shadow: 0 0 10px var(--red-glow); }
+
+  .option-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1.5px solid rgba(255,255,255,0.2);
+    transition: all 0.25s;
+    flex-shrink: 0;
+  }
+
+  /* Progress bar */
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #FB0300, #ff4444);
+    border-radius: 9999px;
+    transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    position: relative;
+  }
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 8px rgba(255,255,255,0.6);
+  }
+
+  /* Thermometer */
+  .thermo-track {
+    width: 28px;
+    background: var(--surface2);
+    border-radius: 14px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .thermo-fill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    border-radius: 14px;
+    transition: height 1.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  /* Answer completion badge */
+  .q-answered {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--surface2);
+    transition: background 0.3s;
+  }
+  .q-answered.done { background: var(--red); }
+
+  /* Fade + slide up animation */
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-red {
+    0%, 100% { box-shadow: 0 0 0 0 var(--red-glow); }
+    50% { box-shadow: 0 0 0 12px transparent; }
+  }
+
+  .anim-slide  { animation: slideUp 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+  .anim-scale  { animation: scaleIn 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+  .anim-fade   { animation: fadeIn 0.8s ease both; }
+  .d-1  { animation-delay: 0.1s; }
+  .d-2  { animation-delay: 0.2s; }
+  .d-3  { animation-delay: 0.3s; }
+  .d-4  { animation-delay: 0.4s; }
+  .d-5  { animation-delay: 0.5s; }
+  .d-6  { animation-delay: 0.6s; }
+  .d-7  { animation-delay: 0.7s; }
+
+  /* Alert toast */
+  #toast {
+    position: fixed;
+    bottom: 32px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #1a1a1a;
+    border: 1px solid rgba(251,3,0,0.5);
+    color: var(--text);
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    z-index: 9999;
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* History table */
+  .hist-row { transition: background 0.2s; }
+  .hist-row:hover { background: rgba(255,255,255,0.03); }
+
+  /* Score number big display */
+  .score-display {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(72px, 12vw, 110px);
+    line-height: 1;
+    background: linear-gradient(135deg, #fff 40%, rgba(255,255,255,0.4));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Badge level */
+  .level-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 2px; }
+
+  /* Responsive tweaks */
+  @media (max-width: 640px) {
+    .likert-row { flex-direction: column; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ═══════════════════════════════ SCREEN 1 — INTRO ═══════════════════════════════ -->
+<div id="screen-intro" class="screen active flex-col items-center justify-center min-h-screen px-6 py-16 relative z-10">
+  <div class="max-w-xl w-full mx-auto text-center">
+
+    <!-- Logo mark -->
+    <div class="anim-fade d-1 mb-10 flex justify-center">
+      <div class="w-16 h-16 rounded-2xl glass flex items-center justify-center" style="box-shadow: 0 0 40px var(--red-glow)">
+        <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+          <circle cx="15" cy="15" r="14" stroke="#FB0300" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <path d="M15 8v7l4 4" stroke="#FB0300" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="15" cy="15" r="2" fill="#FB0300"/>
+        </svg>
+      </div>
+    </div>
+
+    <p class="anim-slide d-1 text-xs tracking-[0.25em] uppercase mb-4" style="color: var(--red)">Escala de Estrés Percibido · PSS</p>
+    <h1 class="anim-slide d-2 mb-6" style="font-family:'DM Serif Display',serif; font-size:clamp(2.4rem,6vw,3.6rem); line-height:1.1;">
+      Test Profesional<br><em>de Estrés</em>
+    </h1>
+
+    <p class="anim-slide d-3 text-sm leading-7 mb-10" style="color:var(--text-muted); max-width:420px; margin-left:auto; margin-right:auto;">
+      Este instrumento mide tu nivel de estrés percibido en el último mes.<br>
+      Basado en la <strong style="color:var(--text)">Perceived Stress Scale (PSS)</strong> validada internacionalmente,<br>
+      consta de 10 preguntas y toma menos de 3 minutos.
+    </p>
+
+    <!-- Stats row -->
+    <div class="anim-slide d-4 grid grid-cols-3 gap-3 mb-10">
+      <div class="glass rounded-xl py-4 px-2">
+        <div class="text-2xl font-semibold mb-1" style="font-family:'DM Serif Display',serif">10</div>
+        <div class="text-xs" style="color:var(--text-muted)">Preguntas</div>
+      </div>
+      <div class="glass rounded-xl py-4 px-2">
+        <div class="text-2xl font-semibold mb-1" style="font-family:'DM Serif Display',serif">3'</div>
+        <div class="text-xs" style="color:var(--text-muted)">Duración</div>
+      </div>
+      <div class="glass rounded-xl py-4 px-2">
+        <div class="text-2xl font-semibold mb-1" style="font-family:'DM Serif Display',serif">PSS</div>
+        <div class="text-xs" style="color:var(--text-muted)">Validado</div>
+      </div>
+    </div>
+
+    <button id="btn-start" class="anim-slide d-5 btn-primary w-full py-4 rounded-xl text-base">
+      Comenzar evaluación →
+    </button>
+
+    <!-- History preview if any -->
+    <div id="intro-history" class="anim-slide d-6 mt-8 hidden">
+      <button id="btn-view-history" class="text-xs underline underline-offset-4" style="color:var(--text-muted)">
+        Ver mis evaluaciones anteriores ↓
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCREEN 2 — QUIZ ═══════════════════════════════ -->
+<div id="screen-quiz" class="screen flex-col items-center min-h-screen px-4 py-10 relative z-10">
+  <div class="max-w-2xl w-full mx-auto">
+
+    <!-- Top bar -->
+    <div class="flex items-center justify-between mb-8">
+      <button id="btn-back-quiz" class="btn-ghost px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+        ← Inicio
+      </button>
+      <div id="q-counter" class="text-sm" style="color:var(--text-muted)">Pregunta <span id="q-current">0</span> de 10</div>
+    </div>
+
+    <!-- Progress -->
+    <div class="mb-2 flex items-center justify-between">
+      <span class="text-xs" style="color:var(--text-muted)">Progreso</span>
+      <span id="progress-pct" class="text-xs font-medium" style="color:var(--red)">0%</span>
+    </div>
+    <div class="w-full h-1.5 rounded-full mb-2" style="background:var(--surface2)">
+      <div id="progress-bar" class="progress-fill" style="width:0%"></div>
+    </div>
+
+    <!-- Dot indicators -->
+    <div class="flex gap-2 mb-10 flex-wrap" id="q-dots"></div>
+
+    <!-- Questions -->
+    <div id="questions-container" class="space-y-5"></div>
+
+    <!-- Submit button -->
+    <div class="mt-10">
+      <button id="btn-submit" class="btn-primary w-full py-4 rounded-xl text-base">
+        Calcular resultado →
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCREEN 3 — RESULTS ═══════════════════════════════ -->
+<div id="screen-results" class="screen flex-col items-center min-h-screen px-4 py-10 relative z-10">
+  <div class="max-w-3xl w-full mx-auto">
+
+    <!-- Header -->
+    <div class="text-center mb-10">
+      <p class="anim-slide d-1 text-xs tracking-[0.2em] uppercase mb-3" style="color:var(--red)">Resultado de tu evaluación</p>
+      <h2 class="anim-slide d-2" style="font-family:'DM Serif Display',serif; font-size:clamp(1.8rem,5vw,2.8rem)">Tu nivel de estrés</h2>
+    </div>
+
+    <!-- Score + Thermometer -->
+    <div class="anim-scale d-2 glass rounded-2xl p-8 mb-6 flex flex-col md:flex-row items-center gap-8">
+
+      <!-- Thermometer -->
+      <div class="flex flex-col items-center gap-3 flex-shrink-0">
+        <div class="text-xs mb-2 tracking-widest uppercase" style="color:var(--text-muted)">Nivel</div>
+        <div class="relative flex items-end justify-center" style="height:180px;">
+          <!-- Scale labels -->
+          <div class="absolute right-full mr-3 h-full flex flex-col justify-between text-right">
+            <span class="text-xs" style="color:var(--text-muted)">40</span>
+            <span class="text-xs" style="color:var(--text-muted)">27</span>
+            <span class="text-xs" style="color:var(--text-muted)">14</span>
+            <span class="text-xs" style="color:var(--text-muted)">0</span>
+          </div>
+          <div class="thermo-track" style="height:180px;">
+            <div id="thermo-fill" class="thermo-fill" style="height:0%; background:var(--green)"></div>
+          </div>
+          <!-- Tick marks -->
+          <div class="absolute left-full ml-2 h-full flex flex-col justify-between">
+            <div class="w-2 h-px" style="background:rgba(255,255,255,0.15)"></div>
+            <div class="w-2 h-px" style="background:rgba(255,255,255,0.15)"></div>
+            <div class="w-2 h-px" style="background:rgba(255,255,255,0.15)"></div>
+            <div class="w-2 h-px" style="background:rgba(255,255,255,0.15)"></div>
+          </div>
+        </div>
+        <div class="text-xs mt-1" style="color:var(--text-muted)">Escala PSS</div>
+      </div>
+
+      <!-- Main score -->
+      <div class="flex-1 text-center md:text-left">
+        <div class="score-display" id="result-score">0</div>
+        <div class="text-base mb-4" style="color:var(--text-muted)">puntos de 40 posibles</div>
+        <div id="result-level-badge" class="level-badge mb-4"></div>
+        <p id="result-desc" class="text-sm leading-7" style="color:var(--text-muted)"></p>
+      </div>
+
+    </div>
+
+    <!-- Chart -->
+    <div class="anim-slide d-3 glass rounded-2xl p-6 mb-6">
+      <p class="text-sm font-medium mb-5" style="color:var(--text-muted)">Distribución de puntaje · Comparativa de rangos</p>
+      <div style="height:220px; position:relative;">
+        <canvas id="result-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Breakdown per question -->
+    <div class="anim-slide d-4 glass rounded-2xl p-6 mb-6">
+      <p class="text-sm font-medium mb-5" style="color:var(--text-muted)">Respuestas por pregunta</p>
+      <div id="breakdown" class="space-y-3"></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="anim-slide d-5 grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10">
+      <button id="btn-export" class="btn-primary py-3 rounded-xl text-sm">Exportar a PDF</button>
+      <button id="btn-retry" class="btn-ghost py-3 rounded-xl text-sm">Repetir test</button>
+      <button id="btn-home" class="btn-ghost py-3 rounded-xl text-sm">Volver al inicio</button>
+    </div>
+
+    <!-- History -->
+    <div id="history-section" class="anim-slide d-6">
+      <p class="text-sm font-medium mb-4" style="color:var(--text-muted)">Historial de evaluaciones</p>
+      <div class="glass rounded-2xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              <th class="text-left px-5 py-3 text-xs tracking-wider uppercase" style="color:var(--text-muted);font-weight:500">Fecha</th>
+              <th class="text-center px-5 py-3 text-xs tracking-wider uppercase" style="color:var(--text-muted);font-weight:500">Puntaje</th>
+              <th class="text-center px-5 py-3 text-xs tracking-wider uppercase" style="color:var(--text-muted);font-weight:500">Nivel</th>
+            </tr>
+          </thead>
+          <tbody id="history-table"></tbody>
+        </table>
+        <div id="history-empty" class="text-center py-6 text-sm" style="color:var(--text-muted);display:none">Sin historial aún</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCREEN 4 — HISTORY ═══════════════════════════════ -->
+<div id="screen-history" class="screen flex-col items-center min-h-screen px-4 py-10 relative z-10">
+  <div class="max-w-2xl w-full mx-auto">
+    <div class="flex items-center gap-4 mb-8">
+      <button id="btn-back-history" class="btn-ghost px-4 py-2 rounded-lg text-sm">← Inicio</button>
+      <h2 style="font-family:'DM Serif Display',serif; font-size:1.8rem">Historial</h2>
+    </div>
+    <div class="glass rounded-2xl overflow-hidden">
+      <table class="w-full text-sm">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th class="text-left px-5 py-3 text-xs tracking-wider uppercase" style="color:var(--text-muted);font-weight:500">Fecha</th>
+            <th class="text-center px-5 py-3 text-xs tracking-wider uppercase" style="color:var(--text-muted);font-weight:500">Puntaje</th>
+            <th class="text-center px-5 py-3 text-xs tracking-wider uppercase" style="color:var(--text-muted);font-weight:500">Nivel</th>
+          </tr>
+        </thead>
+        <tbody id="history-table-full"></tbody>
+      </table>
+    </div>
+    <div class="mt-4 flex justify-end">
+      <button id="btn-clear-history" class="btn-ghost px-4 py-2 rounded-lg text-xs" style="color:#ef4444;border-color:rgba(239,68,68,0.3)">Borrar historial</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+/* ━━━━━━━━━━━━━━━━━━━━━━ DATA ━━━━━━━━━━━━━━━━━━━━━━ */
+const QUESTIONS = [
+  "¿Con qué frecuencia te has sentido nervioso o estresado últimamente?",
+  "¿Con qué frecuencia sientes que no puedes controlar las cosas importantes de tu vida?",
+  "¿Con qué frecuencia te sientes abrumado por las responsabilidades?",
+  "¿Con qué frecuencia te cuesta relajarte o desconectar la mente?",
+  "¿Con qué frecuencia te sientes irritable o impaciente con otras personas?",
+  "¿Con qué frecuencia sientes que todo se te acumula y no puedes manejarlo?",
+  "¿Con qué frecuencia tienes problemas para dormir por preocupaciones?",
+  "¿Con qué frecuencia te sientes cansado mentalmente aunque no hayas hecho mucho?",
+  "¿Con qué frecuencia sientes que te falta tiempo para todo?",
+  "¿Con qué frecuencia sientes que las cosas están fuera de control en tu vida?"
+];
+
+const LIKERT = [
+  { label: "Nunca",          value: 0 },
+  { label: "Casi nunca",     value: 1 },
+  { label: "A veces",        value: 2 },
+  { label: "Bastante seguido", value: 3 },
+  { label: "Muy seguido",    value: 4 }
+];
+
+const LEVELS = [
+  { min:0,  max:13, label:"Estrés Bajo",     color:"#22C55E", bg:"rgba(34,197,94,0.12)",  thermo:"#22C55E",
+    desc:"Tu nivel de estrés percibido es bajo. Gestionas bien las demandas cotidianas, mantienes el equilibrio emocional y dispones de estrategias de afrontamiento efectivas. Continúa con tus hábitos saludables." },
+  { min:14, max:26, label:"Estrés Moderado", color:"#EAB308", bg:"rgba(234,179,8,0.12)",  thermo:"#EAB308",
+    desc:"Presentas un nivel moderado de estrés percibido. Aunque funcionas bien en general, hay áreas en tu vida que generan tensión notable. Considera incorporar técnicas de relajación, meditación o actividad física regular." },
+  { min:27, max:40, label:"Estrés Alto",     color:"#FB0300", bg:"rgba(251,3,0,0.12)",    thermo:"#FB0300",
+    desc:"Tu nivel de estrés percibido es elevado. Esto puede impactar negativamente tu salud física y mental. Se recomienda buscar apoyo profesional, revisar tus cargas y prioridades, y establecer límites saludables." }
+];
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ STATE ━━━━━━━━━━━━━━━━━━━━━━ */
+let answers = new Array(10).fill(null);
+let resultChart = null;
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ SCREENS ━━━━━━━━━━━━━━━━━━━━━━ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
+  const el = document.getElementById(id);
+  el.style.display = 'flex';
+  requestAnimationFrame(() => { el.classList.add('active'); });
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ TOAST ━━━━━━━━━━━━━━━━━━━━━━ */
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ LEVEL HELPER ━━━━━━━━━━━━━━━━━━━━━━ */
+function getLevel(score) {
+  return LEVELS.find(l => score >= l.min && score <= l.max) || LEVELS[2];
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ BUILD QUIZ ━━━━━━━━━━━━━━━━━━━━━━ */
+function buildQuiz() {
+  answers = new Array(10).fill(null);
+
+  // Dot indicators
+  const dots = document.getElementById('q-dots');
+  dots.innerHTML = '';
+  for (let i = 0; i < 10; i++) {
+    const d = document.createElement('div');
+    d.className = 'q-answered';
+    d.id = `dot-${i}`;
+    dots.appendChild(d);
+  }
+
+  const container = document.getElementById('questions-container');
+  container.innerHTML = '';
+
+  QUESTIONS.forEach((q, i) => {
+    const card = document.createElement('div');
+    card.className = 'glass rounded-2xl p-6 anim-slide';
+    card.style.animationDelay = `${0.05 * i}s`;
+
+    card.innerHTML = `
+      <div class="flex items-start gap-4 mb-5">
+        <span class="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold" 
+              style="background:var(--surface2); color:var(--red)">${i+1}</span>
+        <p class="text-sm leading-6" style="color:var(--text)">${q}</p>
+      </div>
+      <div class="grid grid-cols-5 gap-2" id="q-options-${i}">
+        ${LIKERT.map(opt => `
+          <button 
+            class="likert-option rounded-xl py-3 px-1 flex flex-col items-center gap-2 w-full"
+            data-q="${i}" data-v="${opt.value}"
+            onclick="selectAnswer(${i}, ${opt.value}, this)">
+            <div class="option-dot"></div>
+            <span class="text-xs leading-tight text-center" style="color:var(--text-muted)">${opt.label}</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  updateProgress();
+}
+
+function selectAnswer(qIdx, value, btn) {
+  answers[qIdx] = value;
+  // Clear sibling selection
+  const siblings = document.querySelectorAll(`[data-q="${qIdx}"]`);
+  siblings.forEach(s => s.classList.remove('selected'));
+  btn.classList.add('selected');
+
+  // Update dot
+  document.getElementById(`dot-${qIdx}`).classList.add('done');
+
+  // Update progress
+  updateProgress();
+}
+
+function updateProgress() {
+  const answered = answers.filter(a => a !== null).length;
+  const pct = Math.round((answered / 10) * 100);
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('q-current').textContent = answered;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ CALCULATE RESULT ━━━━━━━━━━━━━━━━━━━━━━ */
+function calculateResult() {
+  const unanswered = answers.filter(a => a === null).length;
+  if (unanswered > 0) {
+    showToast(`⚠ Faltan ${unanswered} pregunta${unanswered > 1 ? 's' : ''} por responder`);
+    // Scroll to first unanswered
+    const firstUnanswered = answers.findIndex(a => a === null);
+    const card = document.getElementById('questions-container').children[firstUnanswered];
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Flash the card
+    card?.classList.add('ring-1');
+    card?.style.setProperty('border-color', '#FB0300');
+    return;
+  }
+
+  const score = answers.reduce((sum, a) => sum + a, 0);
+  const level = getLevel(score);
+
+  // Save to localStorage
+  saveResult(score, level.label);
+
+  // Show results
+  showScreen('screen-results');
+  renderResults(score, level);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ RENDER RESULTS ━━━━━━━━━━━━━━━━━━━━━━ */
+function renderResults(score, level) {
+  // Animate score counter
+  const scoreEl = document.getElementById('result-score');
+  let current = 0;
+  const interval = setInterval(() => {
+    current++;
+    scoreEl.textContent = current;
+    if (current >= score) clearInterval(interval);
+  }, 40);
+
+  // Level badge
+  const badge = document.getElementById('result-level-badge');
+  badge.style.background = level.bg;
+  badge.style.color = level.color;
+  badge.style.border = `1px solid ${level.color}40`;
+  badge.innerHTML = `
+    <span style="width:7px;height:7px;border-radius:50%;background:${level.color};flex-shrink:0;display:inline-block"></span>
+    ${level.label}
+  `;
+
+  // Description
+  document.getElementById('result-desc').textContent = level.desc;
+
+  // Thermometer animation
+  const thermoFill = document.getElementById('thermo-fill');
+  const pct = (score / 40) * 100;
+  thermoFill.style.background = level.thermo;
+  setTimeout(() => { thermoFill.style.height = pct + '%'; }, 400);
+
+  // Chart
+  renderChart(score);
+
+  // Breakdown
+  renderBreakdown();
+
+  // History table
+  renderHistory();
+}
+
+function renderChart(score) {
+  if (resultChart) { resultChart.destroy(); resultChart = null; }
+
+  const ctx = document.getElementById('result-chart').getContext('2d');
+  resultChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Estrés Bajo\n(0–13)', 'Estrés Moderado\n(14–26)', 'Estrés Alto\n(27–40)', 'Tu Puntaje'],
+      datasets: [{
+        label: 'Rango',
+        data: [13, 13, 14, null],
+        backgroundColor: [
+          'rgba(34,197,94,0.15)',
+          'rgba(234,179,8,0.15)',
+          'rgba(251,3,0,0.15)',
+          'transparent'
+        ],
+        borderColor: ['rgba(34,197,94,0.5)', 'rgba(234,179,8,0.5)', 'rgba(251,3,0,0.5)', 'transparent'],
+        borderWidth: 1,
+        borderRadius: 6,
+        base: [0, 14, 27, 0],
+        barThickness: 40
+      }, {
+        label: 'Tu Puntaje',
+        data: [null, null, null, score],
+        backgroundColor: getLevel(score).color + 'CC',
+        borderColor: getLevel(score).color,
+        borderWidth: 2,
+        borderRadius: 6,
+        barThickness: 40
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          titleColor: '#fff',
+          bodyColor: '#888',
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y} puntos`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#666', font: { family: 'DM Sans', size: 11 } }
+        },
+        y: {
+          min: 0, max: 40,
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            color: '#666',
+            font: { family: 'DM Sans', size: 11 },
+            stepSize: 10
+          }
+        }
+      },
+      animation: { duration: 1000, easing: 'easeOutQuart' }
+    }
+  });
+}
+
+function renderBreakdown() {
+  const container = document.getElementById('breakdown');
+  container.innerHTML = '';
+  const labels = ['Nunca','Casi nunca','A veces','Bastante seguido','Muy seguido'];
+  QUESTIONS.forEach((q, i) => {
+    const val = answers[i];
+    const pct = (val / 4) * 100;
+    const color = val <= 1 ? '#22C55E' : val === 2 ? '#EAB308' : '#FB0300';
+    container.innerHTML += `
+      <div class="flex items-center gap-4">
+        <span class="text-xs w-5 flex-shrink-0 text-right" style="color:var(--text-muted)">${i+1}</span>
+        <div class="flex-1 h-1.5 rounded-full overflow-hidden" style="background:var(--surface2)">
+          <div style="width:${pct}%; height:100%; background:${color}; border-radius:9999px; transition:width 1s ${0.05*i}s cubic-bezier(0.25,0.46,0.45,0.94)"></div>
+        </div>
+        <span class="text-xs w-24 flex-shrink-0" style="color:${color}">${labels[val]}</span>
+      </div>
+    `;
+  });
+  // Trigger animation
+  requestAnimationFrame(() => {
+    container.querySelectorAll('div > div > div').forEach(bar => {
+      const w = bar.style.width;
+      bar.style.width = '0';
+      setTimeout(() => { bar.style.width = w; }, 100);
+    });
+  });
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ HISTORY ━━━━━━━━━━━━━━━━━━━━━━ */
+function saveResult(score, levelLabel) {
+  const history = JSON.parse(localStorage.getItem('pss_history') || '[]');
+  history.unshift({
+    date: new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+    score,
+    level: levelLabel
+  });
+  localStorage.setItem('pss_history', JSON.stringify(history.slice(0, 20)));
+}
+
+function renderHistory() {
+  const history = JSON.parse(localStorage.getItem('pss_history') || '[]');
+  const tbody = document.getElementById('history-table');
+  const tbodyFull = document.getElementById('history-table-full');
+  const empty = document.getElementById('history-empty');
+
+  const buildRows = (target) => {
+    target.innerHTML = '';
+    if (history.length === 0) {
+      empty && (empty.style.display = 'block');
+      return;
+    }
+    empty && (empty.style.display = 'none');
+    history.forEach(h => {
+      const lv = getLevel(h.score);
+      target.innerHTML += `
+        <tr class="hist-row" style="border-bottom:1px solid var(--border)">
+          <td class="px-5 py-3.5" style="color:var(--text-muted)">${h.date}</td>
+          <td class="px-5 py-3.5 text-center font-semibold">${h.score}/40</td>
+          <td class="px-5 py-3.5 text-center">
+            <span class="level-badge" style="background:${lv.bg};color:${lv.color};border:1px solid ${lv.color}40;font-size:0.7rem;">
+              ${h.level}
+            </span>
+          </td>
+        </tr>
+      `;
+    });
+  };
+
+  if (tbody) buildRows(tbody);
+  if (tbodyFull) buildRows(tbodyFull);
+}
+
+function checkHistory() {
+  const history = JSON.parse(localStorage.getItem('pss_history') || '[]');
+  const intro = document.getElementById('intro-history');
+  if (history.length > 0) intro.classList.remove('hidden');
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ EXPORT PDF ━━━━━━━━━━━━━━━━━━━━━━ */
+async function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const score = answers.reduce((s, a) => s + a, 0);
+  const level = getLevel(score);
+  const date = new Date().toLocaleDateString('es-ES', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+  // Background
+  doc.setFillColor(11, 11, 11);
+  doc.rect(0, 0, 210, 297, 'F');
+
+  // Red accent bar
+  doc.setFillColor(251, 3, 0);
+  doc.rect(0, 0, 210, 2, 'F');
+
+  // Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(245, 245, 245);
+  doc.text('Test Profesional de Estrés', 20, 22);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(136, 136, 136);
+  doc.text('Escala de Estrés Percibido · PSS', 20, 30);
+  doc.text(date, 20, 37);
+
+  // Divider
+  doc.setDrawColor(50, 50, 50);
+  doc.line(20, 42, 190, 42);
+
+  // Score card
+  doc.setFillColor(25, 25, 25);
+  doc.roundedRect(20, 48, 80, 40, 4, 4, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(36);
+  doc.setTextColor(245, 245, 245);
+  doc.text(String(score), 35, 72);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(136, 136, 136);
+  doc.text('de 40 puntos', 35, 80);
+
+  // Level badge
+  doc.setFillColor(25, 25, 25);
+  doc.roundedRect(110, 48, 80, 40, 4, 4, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(
+    level.color === '#22C55E' ? 34 : level.color === '#EAB308' ? 234 : 251,
+    level.color === '#22C55E' ? 197 : level.color === '#EAB308' ? 179 : 3,
+    level.color === '#22C55E' ? 94  : level.color === '#EAB308' ? 8   : 0
+  );
+  doc.text(level.label, 125, 68);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(136, 136, 136);
+  doc.text('Nivel de Estrés', 125, 80);
+
+  // Description
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(200, 200, 200);
+  const lines = doc.splitTextToSize(level.desc, 170);
+  doc.text(lines, 20, 102);
+
+  // Chart image
+  const canvas = document.getElementById('result-chart');
+  if (canvas) {
+    try {
+      const imgData = canvas.toDataURL('image/png');
+      doc.setFillColor(25, 25, 25);
+      doc.roundedRect(20, 125, 170, 80, 4, 4, 'F');
+      doc.addImage(imgData, 'PNG', 25, 128, 160, 74);
+    } catch(e) {}
+  }
+
+  // Responses table
+  doc.setDrawColor(50, 50, 50);
+  doc.line(20, 215, 190, 215);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(136, 136, 136);
+  doc.text('Respuestas', 20, 223);
+
+  const labels = ['Nunca','Casi nunca','A veces','Bastante seguido','Muy seguido'];
+  answers.forEach((a, i) => {
+    const y = 232 + i * 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(180, 180, 180);
+    doc.text(`${i+1}. ${QUESTIONS[i].substring(0, 60)}${QUESTIONS[i].length > 60 ? '...' : ''}`, 20, y);
+    doc.setTextColor(200, 200, 200);
+    doc.text(labels[a], 170, y, { align: 'right' });
+  });
+
+  // Footer
+  doc.setFillColor(251, 3, 0);
+  doc.rect(0, 294, 210, 3, 'F');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  doc.text('Generado por Test PSS · Solo con fines orientativos, no sustituye consulta profesional.', 105, 291, { align: 'center' });
+
+  doc.save(`test-estres-pss-${Date.now()}.pdf`);
+  showToast('✓ PDF exportado correctamente');
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━ INIT / EVENT LISTENERS ━━━━━━━━━━━━━━━━━━━━━━ */
+document.getElementById('btn-start').addEventListener('click', () => {
+  buildQuiz();
+  showScreen('screen-quiz');
+  window.scrollTo(0, 0);
+});
+
+document.getElementById('btn-back-quiz').addEventListener('click', () => {
+  showScreen('screen-intro');
+});
+
+document.getElementById('btn-submit').addEventListener('click', calculateResult);
+
+document.getElementById('btn-export').addEventListener('click', exportPDF);
+
+document.getElementById('btn-retry').addEventListener('click', () => {
+  buildQuiz();
+  showScreen('screen-quiz');
+  window.scrollTo(0, 0);
+});
+
+document.getElementById('btn-home').addEventListener('click', () => {
+  checkHistory();
+  showScreen('screen-intro');
+  window.scrollTo(0, 0);
+});
+
+document.getElementById('btn-view-history').addEventListener('click', () => {
+  renderHistory();
+  showScreen('screen-history');
+});
+
+document.getElementById('btn-back-history').addEventListener('click', () => {
+  showScreen('screen-intro');
+});
+
+document.getElementById('btn-clear-history').addEventListener('click', () => {
+  if (confirm('¿Borrar todo el historial?')) {
+    localStorage.removeItem('pss_history');
+    renderHistory();
+    showToast('Historial borrado');
+  }
+});
+
+// Init
+checkHistory();
+</script>
+</body>
+</html>
